@@ -1,123 +1,155 @@
 import { createServer } from "node:http";
-import { Schema } from "effect";
+import { Effect, Layer, Match, Option, pipe, Schema } from "effect";
 import { type WebSocket, WebSocketServer } from "ws";
 
 import * as M from "./model.ts";
+import * as S from "./shared.ts";
+import { BunRuntime } from "@effect/platform-bun";
 
 const currentConnections: Map<string, M.WebSocketConnection> = new Map();
 
-const server = createServer((req, res) => {
-  if (req.url !== "/colors") {
-    res.writeHead(404);
+const Services = Layer.mergeAll(
+  S.HttpServer.Live,
+  S.WsServer.Live
+)
 
-    res.end("Not Found");
-
-    return;
+const MainLayer = Layer.effectDiscard(Effect.gen(function* () {
+  function broadcastMessage(message: M.ServerOutgoingMessage) {
+    const messageString = JSON.stringify(message);
+    currentConnections.forEach((conn) => conn._rawWS.send(messageString));
   }
 
-  const currentColors = Array.from(currentConnections.values()).map(
-    (conn) => conn.color
-  );
+  const http_server = yield* S.HttpServer;
+  const ws_server = yield* S.WsServer;
 
-  const availableColors = M.colors.filter(
-    (color) => !currentColors.includes(color)
-  );
+  http_server.on('request', (req, res) => {
+    const url = Option.fromNullable(req.url);
 
-  const message = M.AvailableColorsResponse.make({
-    _tag: "availableColors",
-    colors: availableColors,
-  });
+    Option.match(url, {
+      onNone: () => '',
+      onSome: (url) => Match.value(url).pipe(
+        Match.when('/colors', () => {
+          const currentColors = Array.from(currentConnections.values()).map(
+            (conn) => conn.color
+          );
 
-  res.writeHead(200, { "Content-Type": "application/json" });
+          const availableColors = M.colors.filter(
+            (color) => !currentColors.includes(color)
+          );
 
-  res.end(JSON.stringify(message));
-});
-
-const wss = new WebSocketServer({ server });
-
-wss.on("connection", (ws: WebSocket) => {
-  let connectionName: string;
-
-  ws.on("message", (data) => {
-    try {
-      const message = JSON.parse(data.toString());
-
-      const parsedMessage = Schema.decodeUnknownSync(
-        Schema.Union(M.ServerIncomingMessage, M.StartupMessage)
-      )(message);
-
-      switch (parsedMessage._tag) {
-        case "startup": {
-          const { color, name } = parsedMessage;
-
-          if (!M.colors.includes(color) || currentConnections.has(name)) {
-            ws.close(); // Close the connection if the color is not available or the name is already taken
-
-            return;
-          }
-
-          connectionName = name;
-
-          console.log(`New connection: ${name}`);
-
-          currentConnections.set(name, {
-            _rawWS: ws,
-            name,
-            color,
-            timeConnected: Date.now(),
+          const message = M.AvailableColorsResponse.make({
+            colors: availableColors,
           });
 
-          broadcastMessage({ _tag: "join", name, color });
+          res.writeHead(200, { "Content-Type": "application/json" });
 
-          break;
-        }
+          res.end(JSON.stringify(message));
 
-        case "message": {
-          if (connectionName) {
-            const conn = currentConnections.get(connectionName);
+        }),
+        Match.orElse((url) => {
+          console.log('url -->', url)
+          res.writeHead(404);
+          res.end("Not Found Again Option");
+          return;
+        })
+      )
+    })
 
-            if (conn) {
-              broadcastMessage({
-                _tag: "message",
-                name: conn.name,
-                color: conn.color,
-                message: parsedMessage.message,
-                timestamp: Date.now(),
-              });
+  })
+
+  // end http_server
+
+  ws_server.on('connection', (ws) => {
+    let connectionName: string;
+
+    ws.on("message", (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+
+        const parsedMessage = Schema.decodeUnknownSync(
+          Schema.Union(M.ServerIncomingMessage, M.StartupMessage)
+        )(message);
+
+        switch (parsedMessage._tag) {
+          case "startup": {
+            const { color, name } = parsedMessage;
+
+            if (!M.colors.includes(color) || currentConnections.has(name)) {
+              ws.close(); // Close the connection if the color is not available or the name is already taken
+
+              return;
             }
+
+            connectionName = name;
+
+            console.log(`New connection: ${name}`);
+
+            currentConnections.set(name, {
+              _rawWS: ws,
+              name,
+              color,
+              timeConnected: Date.now(),
+            });
+
+            broadcastMessage({ _tag: "join", name, color });
+
+            break;
           }
 
-          break;
+          case "message": {
+            if (connectionName) {
+              const conn = currentConnections.get(connectionName);
+
+              if (conn) {
+                broadcastMessage({
+                  _tag: "message",
+                  name: conn.name,
+                  color: conn.color,
+                  message: parsedMessage.message,
+                  timestamp: Date.now(),
+                });
+              }
+            }
+
+            break;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to process message:", err);
+      }
+    });
+
+    ws.on("close", () => {
+      if (connectionName) {
+        const conn = currentConnections.get(connectionName);
+
+        if (conn) {
+          broadcastMessage({ _tag: "leave", name: conn.name, color: conn.color });
+
+          currentConnections.delete(connectionName);
+
+          console.log(`Connection closed: ${connectionName}`);
         }
       }
-    } catch (err) {
-      console.error("Failed to process message:", err);
-    }
-  });
+    });
+  })
 
-  ws.on("close", () => {
-    if (connectionName) {
-      const conn = currentConnections.get(connectionName);
+  // end ws_server
 
-      if (conn) {
-        broadcastMessage({ _tag: "leave", name: conn.name, color: conn.color });
+  setInterval(
+    () => console.log("Current connections:", currentConnections.size),
+    1000
+  );
 
-        currentConnections.delete(connectionName);
+}))
+  .pipe(
+    Layer.merge(S.Listen),
+    Layer.provide(Services)
+  )
 
-        console.log(`Connection closed: ${connectionName}`);
-      }
-    }
-  });
-});
 
-function broadcastMessage(message: M.ServerOutgoingMessage) {
-  const messageString = JSON.stringify(message);
-  currentConnections.forEach((conn) => conn._rawWS.send(messageString));
-}
-
-setInterval(
-  () => console.log("Current connections:", currentConnections.size),
-  1000
-);
-
-server.listen(3000, () => console.log("Server started on port 3000"));
+pipe(
+  MainLayer,
+  Layer.launch,
+  BunRuntime.runMain
+)

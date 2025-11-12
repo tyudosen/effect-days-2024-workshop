@@ -24,12 +24,12 @@ export class BadStartupMessageError extends Data.TaggedError(
   "BadStartupMessage"
 )<{
   readonly error:
-    | {
-        readonly _tag: "parseError";
-        readonly parseError: ParseResult.ParseError;
-      }
-    | { readonly _tag: "colorAlreadyTaken"; readonly color: Color };
-}> {}
+  | {
+    readonly _tag: "parseError";
+    readonly parseError: ParseResult.ParseError;
+  }
+  | { readonly _tag: "colorAlreadyTaken"; readonly color: Color };
+}> { }
 
 export const ServerIncomingMessage = Schema.Union(
   Schema.Struct({ _tag: Schema.Literal("message"), message: Schema.String })
@@ -44,7 +44,7 @@ export class UnknownIncomingMessageError extends Data.TaggedError(
 )<{
   readonly rawMessage: string;
   readonly parseError: ParseResult.ParseError;
-}> {}
+}> { }
 
 export const ServerOutgoingMessage = Schema.Union(
   Schema.Struct({
@@ -76,10 +76,9 @@ export interface WebSocketConnection {
   readonly timeConnected: number;
 }
 
-export const AvailableColorsResponse = Schema.Struct({
-  _tag: Schema.Literal("availableColors"),
+export const AvailableColorsResponse = Schema.TaggedStruct('availableColors', {
   colors: Schema.Array(Color),
-});
+})
 
 export type AvailableColorsResponse = Schema.Schema.Type<
   typeof AvailableColorsResponse
