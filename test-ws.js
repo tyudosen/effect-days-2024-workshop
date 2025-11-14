@@ -1,39 +1,56 @@
-import WebSocket from 'ws';
+import WebSocket from "ws";
 
-const ws = new WebSocket('ws://localhost:3000');
+const ws = new WebSocket("ws://localhost:3000");
 
-ws.on('open', () => {
-  console.log('WebSocket connected');
-  
+ws.on("open", () => {
+  console.log("WebSocket connected");
+
   // Send startup message
   const startupMsg = {
     _tag: "startup",
     name: "test-user",
-    color: "red"
+    color: "red",
   };
-  
-  console.log('Sending startup message:', startupMsg);
+
+  console.log("Sending startup message:", startupMsg);
   ws.send(JSON.stringify(startupMsg));
 });
 
-ws.on('message', (data) => {
-  console.log('Received message:', data.toString());
+ws.on("message", (data) => {
+  console.log("Received message:", data.toString());
 });
 
-ws.on('error', (error) => {
-  console.log('WebSocket error:', error);
+ws.on("error", (error) => {
+  console.log("WebSocket error:", error);
 });
 
-ws.on('close', () => {
-  console.log('WebSocket closed');
+ws.on("close", () => {
+  console.log("WebSocket closed");
 });
 
 // Send a chat message after 2 seconds
 setTimeout(() => {
   const chatMsg = {
     _tag: "message",
-    message: "Hello from test client!"
+    message: "Hello from test client 1",
   };
-  console.log('Sending chat message:', chatMsg);
+  console.log("Sending chat message:", chatMsg);
   ws.send(JSON.stringify(chatMsg));
+
+  // Close the connection after sending the chat message
+  // console.log("Closing WebSocket connection...");
+  // ws.close();
 }, 2000);
+
+setTimeout(() => {
+  const chatMsg = {
+    _tag: "message",
+    message: "Hello from test client 2",
+  };
+  console.log("Sending chat message:", chatMsg);
+  ws.send(JSON.stringify(chatMsg));
+
+  // Close the connection after sending the chat message
+  // console.log("Closing WebSocket connection...");
+  // ws.close();
+}, 4000);

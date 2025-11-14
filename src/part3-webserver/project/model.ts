@@ -1,4 +1,5 @@
 import { Data, type ParseResult, Schema } from "effect";
+import { type WebSocket } from "ws";
 
 export const colors = [
   "red",
@@ -12,8 +13,7 @@ export const colors = [
 export type Color = (typeof colors)[number];
 export const Color = Schema.Literal(...colors);
 
-export const StartupMessage = Schema.Struct({
-  _tag: Schema.Literal("startup"),
+export const StartupMessage = Schema.TaggedStruct("startup", {
   color: Color,
   name: Schema.String,
 });
@@ -21,18 +21,18 @@ export const StartupMessage = Schema.Struct({
 export type StartupMessage = Schema.Schema.Type<typeof StartupMessage>;
 
 export class BadStartupMessageError extends Data.TaggedError(
-  "BadStartupMessage"
+  "BadStartupMessage",
 )<{
   readonly error:
-  | {
-    readonly _tag: "parseError";
-    readonly parseError: ParseResult.ParseError;
-  }
-  | { readonly _tag: "colorAlreadyTaken"; readonly color: Color };
-}> { }
+    | {
+        readonly _tag: "parseError";
+        readonly parseError: ParseResult.ParseError;
+      }
+    | { readonly _tag: "colorAlreadyTaken"; readonly color: Color };
+}> {}
 
 export const ServerIncomingMessage = Schema.Union(
-  Schema.Struct({ _tag: Schema.Literal("message"), message: Schema.String })
+  Schema.TaggedStruct("message", { message: Schema.String }),
 );
 
 export type ServerIncomingMessage = Schema.Schema.Type<
@@ -40,31 +40,31 @@ export type ServerIncomingMessage = Schema.Schema.Type<
 >;
 
 export class UnknownIncomingMessageError extends Data.TaggedError(
-  "UnknownIncomingMessage"
+  "UnknownIncomingMessage",
 )<{
   readonly rawMessage: string;
   readonly parseError: ParseResult.ParseError;
-}> { }
+}> {}
 
-export const ServerOutgoingMessage = Schema.Union(
-  Schema.Struct({
-    _tag: Schema.Literal("message"),
-    name: Schema.String,
-    color: Color,
-    message: Schema.String,
-    timestamp: Schema.Number,
-  }),
-  Schema.Struct({
-    _tag: Schema.Literal("join"),
-    name: Schema.String,
-    color: Color,
-  }),
-  Schema.Struct({
-    _tag: Schema.Literal("leave"),
-    name: Schema.String,
-    color: Color,
-  })
-);
+export const Message = Schema.TaggedStruct("message", {
+  name: Schema.String,
+  color: Color,
+  message: Schema.String,
+  timestamp: Schema.Number,
+});
+
+export const Join = Schema.TaggedStruct("join", {
+  name: Schema.String,
+  color: Color,
+});
+
+export const Leave = Schema.TaggedStruct("leave", {
+  name: Schema.String,
+  color: Color,
+});
+
+export const ServerOutgoingMessage = Schema.Union(Message, Join, Leave);
+
 export type ServerOutgoingMessage = Schema.Schema.Type<
   typeof ServerOutgoingMessage
 >;
@@ -76,9 +76,9 @@ export interface WebSocketConnection {
   readonly timeConnected: number;
 }
 
-export const AvailableColorsResponse = Schema.TaggedStruct('availableColors', {
+export const AvailableColorsResponse = Schema.TaggedStruct("availableColors", {
   colors: Schema.Array(Color),
-})
+});
 
 export type AvailableColorsResponse = Schema.Schema.Type<
   typeof AvailableColorsResponse

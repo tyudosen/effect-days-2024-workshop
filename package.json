@@ -4,6 +4,7 @@
   "type": "module",
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.8.2"
   },
   "peerDependencies": {
@@ -31,7 +32,7 @@
     "chalk": "^5.4.1",
     "effect": "^3.x.x",
     "meow": "^13.2.0",
-    "ws": "^8.18.1"
+    "ws": "^8.18.3"
   },
   "scripts": {
     "pad": "bun run src/pad.ts",
@@ -83,5 +84,6 @@
     "4-s-4": "bun run src/part4-whatsnext/snippets/4-telemetry.ts",
     "4-s-5": "bun run src/part4-whatsnext/snippets/5-batching-and-caching.ts",
     "4-s-6": "bun run src/part4-whatsnext/snippets/6-rpc.ts"
-  }
+  },
+  "packageManager": "pnpm@10.18.2+sha512.9fb969fa749b3ade6035e0f109f0b8a60b5d08a1a87fdf72e337da90dcc93336e2280ca4e44f2358a649b83c17959e9993e777c2080879f3801e6f0d999ad3dd"
 }
