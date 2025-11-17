@@ -2,7 +2,6 @@ import { Layer, Effect, Match, pipe } from "effect";
 import { HttpServer as _HttpServer } from "@effect/platform";
 import * as S from "./shared.ts";
 import * as HttpServer from "./http.ts";
-import * as WsServer from "./ws.ts";
 import { NodeRuntime } from "@effect/platform-node";
 
 
@@ -22,12 +21,10 @@ const StartMessage = Layer.effectDiscard(Effect.gen(function* () {
 })).pipe(
   Layer.provide(HttpServer.Http),
   Layer.provide(S.HttpServer.Live),
-  Layer.provide(S.WsServer.Live)
 )
 
 const MainLayer = Layer.mergeAll(
   HttpServer.Live,
-  WsServer.Live,
   StartMessage,
   S.CurrentConnections.Live
 );

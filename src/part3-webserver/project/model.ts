@@ -1,5 +1,5 @@
-import { Data, type ParseResult, Schema } from "effect";
-import { type WebSocket } from "ws";
+import { Data, type ParseResult, Schema, Effect } from "effect";
+import { Socket } from "@effect/platform"
 
 export const colors = [
   "red",
@@ -24,12 +24,12 @@ export class BadStartupMessageError extends Data.TaggedError(
   "BadStartupMessage",
 )<{
   readonly error:
-    | {
-        readonly _tag: "parseError";
-        readonly parseError: ParseResult.ParseError;
-      }
-    | { readonly _tag: "colorAlreadyTaken"; readonly color: Color };
-}> {}
+  | {
+    readonly _tag: "parseError";
+    readonly parseError: ParseResult.ParseError;
+  }
+  | { readonly _tag: "colorAlreadyTaken"; readonly color: Color };
+}> { }
 
 export const ServerIncomingMessage = Schema.Union(
   Schema.TaggedStruct("message", { message: Schema.String }),
@@ -44,7 +44,7 @@ export class UnknownIncomingMessageError extends Data.TaggedError(
 )<{
   readonly rawMessage: string;
   readonly parseError: ParseResult.ParseError;
-}> {}
+}> { }
 
 export const Message = Schema.TaggedStruct("message", {
   name: Schema.String,
@@ -70,7 +70,8 @@ export type ServerOutgoingMessage = Schema.Schema.Type<
 >;
 
 export interface WebSocketConnection {
-  readonly _rawWS: WebSocket;
+  readonly write: (chunk: Uint8Array | string | Socket.CloseEvent) => Effect.Effect<void, Socket.SocketError>;
+  readonly socket: Socket.Socket;
   readonly name: string;
   readonly color: Color;
   readonly timeConnected: number;
