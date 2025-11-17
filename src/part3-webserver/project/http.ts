@@ -1,9 +1,12 @@
 import {
   Effect,
+  HashMap,
   Layer,
   Match,
+  Option,
   pipe,
-  Schema
+  Ref,
+  Schema,
 } from "effect";
 import * as S from "./shared.ts";
 import * as M from "./model.ts";
@@ -37,12 +40,13 @@ export const Live = HttpRouter.empty.pipe(
       const socket = yield* HttpServerRequest.upgrade
       const socket_write = yield* socket.writer
       const decoder = new TextDecoder()
-      const current_connections = yield* S.CurrentConnections;
-      let connectionName: string;
+      const current_connections_ref = yield* S.CurrentConnections;
+      let connectionName: string | undefined;
 
       const broadcastMessage = Effect.fnUntraced(function* (message: M.ServerOutgoingMessage) {
         const messageString = JSON.stringify(message);
         const encodedMessage = new TextEncoder().encode(messageString);
+        const current_connections = yield* Ref.get(current_connections_ref)
 
 
         yield* Effect.forEach(current_connections, ([_key, conn]) => {
@@ -74,8 +78,10 @@ export const Live = HttpRouter.empty.pipe(
         yield* Match.value(parsedMessage).pipe(
           Match.tag('startup', (message) => Effect.gen(function* () {
             const { color, name } = message;
+            const current_connections = yield* Ref.get(current_connections_ref)
 
-            if (!M.colors.includes(color) || current_connections.has(name)) {
+
+            if (!M.colors.includes(color) || HashMap.has(current_connections, name)) {
               yield* socket_write(new Socket.CloseEvent(1008, "Color unavailable or name taken"))
               return;
             }
@@ -83,19 +89,27 @@ export const Live = HttpRouter.empty.pipe(
             connectionName = name;
 
 
-            current_connections.set(name, {
-              write: socket_write,
-              socket,
-              name,
-              color,
-              timeConnected: Date.now(),
-            });
+            yield* Ref.update(current_connections_ref, (connections) =>
+              HashMap.set(connections, name, {
+                write: socket_write,
+                name,
+                color,
+                timeConnected: Date.now(),
+              })
+            )
 
             yield* broadcastMessage(M.Join.make({ name, color }));
           })),
           Match.tag('message', (message) => Effect.gen(function* () {
             if (connectionName) {
-              const conn = current_connections.get(connectionName);
+              const current_connections = yield* Ref.get(current_connections_ref)
+
+
+              const conn = HashMap.get(current_connections, connectionName).pipe(
+                Option.getOrElse(() => undefined)
+              );
+
+
 
               if (conn) {
                 yield* broadcastMessage(
@@ -118,16 +132,28 @@ export const Live = HttpRouter.empty.pipe(
         onOpen: Effect.log("WebSocket connection opened")
       })
 
-      // Clean up connection when socket closes
-      // yield* Effect.addFinalizer(() =>
-      //   Effect.sync(() => {
-      //     if (connectionName && current_connections.has(connectionName)) {
-      //       const conn = current_connections.get(connectionName)!
-      //       current_connections.delete(connectionName);
-      //       broadcastMessage(M.Leave.make({ name: connectionName, color: conn?.color }));
-      //     }
-      //   })
-      // )
+      yield* Effect.addFinalizer(Effect.fn(function* () {
+        yield* Match.type<typeof connectionName>().pipe(
+          Match.when(Match.string, (name) => Effect.gen(function* () {
+            const current_connections = yield* Ref.get(current_connections_ref);
+            const conn = HashMap.get(current_connections, name);
+
+            yield* Option.match(conn, {
+              onSome: (conn) => broadcastMessage(M.Leave.make({
+                name: conn.name,
+                color: conn.color
+              })),
+              onNone: () => Effect.log('no conn')
+            });
+
+            yield* Ref.update(current_connections_ref, (connections) => HashMap.remove(connections, name));
+          })),
+          Match.when(Match.undefined, () => Effect.log('no connection')),
+          Match.exhaustive
+        )(connectionName).pipe(
+          Effect.catchAll(() => Effect.log('broadcast failed'))
+        );
+      }))
 
       return HttpServerResponse.empty()
     }),

@@ -71,7 +71,6 @@ export type ServerOutgoingMessage = Schema.Schema.Type<
 
 export interface WebSocketConnection {
   readonly write: (chunk: Uint8Array | string | Socket.CloseEvent) => Effect.Effect<void, Socket.SocketError>;
-  readonly socket: Socket.Socket;
   readonly name: string;
   readonly color: Color;
   readonly timeConnected: number;

@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, HashMap, Layer, Ref } from "effect";
 import { createServer } from "node:http";
 import * as M from "./model.ts";
 
@@ -12,15 +12,19 @@ export class HttpServer extends Context.Tag("Http")<
 
 export class CurrentConnections extends Context.Tag("CurrentConnections")<
   CurrentConnections,
-  Map<string, M.WebSocketConnection>
+  Ref.Ref<HashMap.HashMap<string, M.WebSocketConnection>>
 >() {
-  static readonly Live = Layer.sync(CurrentConnections, () => new Map());
+  static readonly Live = Layer.effect(
+    CurrentConnections,
+    Ref.make(HashMap.empty<string, M.WebSocketConnection>())
+  );
 }
 
 export const getAvailableColors = Effect.gen(function* () {
-  const current_connections = yield* CurrentConnections;
+  const current_connections_ref = yield* CurrentConnections;
+  const current_connections = yield* Ref.get(current_connections_ref)
 
-  const currentColors = Array.from(current_connections.values()).map(
+  const currentColors = Array.from(HashMap.values(current_connections)).map(
     (conn) => conn.color,
   );
 
