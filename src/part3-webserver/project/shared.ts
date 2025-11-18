@@ -1,4 +1,4 @@
-import { Context, Effect, HashMap, Layer, Ref } from "effect";
+import { Context, Effect, HashMap, Layer, PubSub, Ref } from "effect";
 import { createServer } from "node:http";
 import * as M from "./model.ts";
 
@@ -17,6 +17,16 @@ export class CurrentConnections extends Context.Tag("CurrentConnections")<
   static readonly Live = Layer.effect(
     CurrentConnections,
     Ref.make(HashMap.empty<string, M.WebSocketConnection>())
+  );
+}
+
+export class MessageBroadcast extends Context.Tag("MessageBroadcast")<
+  MessageBroadcast,
+  PubSub.PubSub<M.ServerOutgoingMessage>
+>() {
+  static readonly Live = Layer.effect(
+    MessageBroadcast,
+    PubSub.bounded<M.ServerOutgoingMessage>(100)
   );
 }
 

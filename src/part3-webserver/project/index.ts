@@ -26,7 +26,8 @@ const StartMessage = Layer.effectDiscard(Effect.gen(function* () {
 const MainLayer = Layer.mergeAll(
   HttpServer.Live,
   StartMessage,
-  S.CurrentConnections.Live
+  S.CurrentConnections.Live,
+  S.MessageBroadcast.Live
 );
 
 pipe(MainLayer, Layer.launch, NodeRuntime.runMain);

@@ -5,6 +5,8 @@ import {
   Match,
   Option,
   pipe,
+  PubSub,
+  Queue,
   Ref,
   Schema,
 } from "effect";
@@ -41,29 +43,29 @@ export const Live = HttpRouter.empty.pipe(
       const socket_write = yield* socket.writer
       const decoder = new TextDecoder()
       const current_connections_ref = yield* S.CurrentConnections;
+      const messageBroadcast = yield* S.MessageBroadcast;
       let connectionName: string | undefined;
 
-      const broadcastMessage = Effect.fnUntraced(function* (message: M.ServerOutgoingMessage) {
-        const messageString = JSON.stringify(message);
-        const encodedMessage = new TextEncoder().encode(messageString);
-        const current_connections = yield* Ref.get(current_connections_ref)
+      const messageSubscription = yield* PubSub.subscribe(messageBroadcast);
 
+      yield* Effect.fork(Effect.gen(function* () {
+        while (true) {
+          const message = yield* Queue.take(messageSubscription);
 
-        yield* Effect.forEach(current_connections, ([_key, conn]) => {
-          const matcher = Match.type<typeof conn>().pipe(
-            Match.when(
-              {
-                write: (write: typeof conn.write) => Boolean(write),
-                name: (name) => name !== connectionName
-              },
-              (conn) => conn.write(encodedMessage)
-            ),
-            Match.orElse((_conn) => Effect.log('Exempt from this brodcast'))
+          if (connectionName && message.name === connectionName &&
+            (message._tag === 'message' || message._tag === 'join')) {
+            continue;
+          }
+
+          const messageString = JSON.stringify(message);
+          const encodedMessage = new TextEncoder().encode(messageString);
+          yield* socket_write(encodedMessage).pipe(
+            Effect.catchAll(() => Effect.log('Failed to send message to client'))
           );
-
-          return matcher(conn)
-        })
-      })
+        }
+      })).pipe(
+        Effect.interruptible
+      );
 
 
       yield* socket.run((chunk) => Effect.gen(function* () {
@@ -91,14 +93,13 @@ export const Live = HttpRouter.empty.pipe(
 
             yield* Ref.update(current_connections_ref, (connections) =>
               HashMap.set(connections, name, {
-                write: socket_write,
                 name,
                 color,
                 timeConnected: Date.now(),
               })
             )
 
-            yield* broadcastMessage(M.Join.make({ name, color }));
+            yield* PubSub.publish(messageBroadcast, M.Join.make({ name, color }));
           })),
           Match.tag('message', (message) => Effect.gen(function* () {
             if (connectionName) {
@@ -112,13 +113,14 @@ export const Live = HttpRouter.empty.pipe(
 
 
               if (conn) {
-                yield* broadcastMessage(
+                yield* PubSub.publish(
+                  messageBroadcast,
                   M.Message.make({
                     name: conn.name,
                     color: conn.color,
                     message: message.message,
                     timestamp: Date.now(),
-                  }),
+                  })
                 );
               }
             }
@@ -139,7 +141,7 @@ export const Live = HttpRouter.empty.pipe(
             const conn = HashMap.get(current_connections, name);
 
             yield* Option.match(conn, {
-              onSome: (conn) => broadcastMessage(M.Leave.make({
+              onSome: (conn) => PubSub.publish(messageBroadcast, M.Leave.make({
                 name: conn.name,
                 color: conn.color
               })),
@@ -151,7 +153,7 @@ export const Live = HttpRouter.empty.pipe(
           Match.when(Match.undefined, () => Effect.log('no connection')),
           Match.exhaustive
         )(connectionName).pipe(
-          Effect.catchAll(() => Effect.log('broadcast failed'))
+          Effect.catchAll(() => Effect.log('leave broadcast failed'))
         );
       }))
 
@@ -173,5 +175,6 @@ export const Live = HttpRouter.empty.pipe(
 ).pipe(
   Layer.provide(Http),
   Layer.provide(S.CurrentConnections.Live),
+  Layer.provide(S.MessageBroadcast.Live),
   Layer.provide(S.HttpServer.Live)
 )
