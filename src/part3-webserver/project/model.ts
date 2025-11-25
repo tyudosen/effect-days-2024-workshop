@@ -1,5 +1,5 @@
-import { Data, type ParseResult, Schema, Effect } from "effect";
 import { Socket } from "@effect/platform"
+import { Data, Effect, type ParseResult, Schema } from "effect"
 
 export const colors = [
   "red",
@@ -8,77 +8,78 @@ export const colors = [
   "blue",
   "magenta",
   "cyan",
-  "white",
-] as const;
-export type Color = (typeof colors)[number];
-export const Color = Schema.Literal(...colors);
+  "white"
+] as const
+export type Color = (typeof colors)[number]
+export const Color = Schema.Literal(...colors)
 
 export const StartupMessage = Schema.TaggedStruct("startup", {
   color: Color,
-  name: Schema.String,
-});
+  name: Schema.String
+})
 
-export type StartupMessage = Schema.Schema.Type<typeof StartupMessage>;
+export type StartupMessage = Schema.Schema.Type<typeof StartupMessage>
 
 export class BadStartupMessageError extends Data.TaggedError(
-  "BadStartupMessage",
+  "BadStartupMessage"
 )<{
   readonly error:
   | {
-    readonly _tag: "parseError";
-    readonly parseError: ParseResult.ParseError;
+    readonly _tag: "parseError"
+    readonly parseError: ParseResult.ParseError
   }
-  | { readonly _tag: "colorAlreadyTaken"; readonly color: Color };
+  | { readonly _tag: "colorAlreadyTaken"; readonly color: Color }
 }> { }
 
 export const ServerIncomingMessage = Schema.Union(
-  Schema.TaggedStruct("message", { message: Schema.String }),
-);
+  Schema.TaggedStruct("message", { message: Schema.String })
+)
 
 export type ServerIncomingMessage = Schema.Schema.Type<
   typeof ServerIncomingMessage
->;
+>
 
 export class UnknownIncomingMessageError extends Data.TaggedError(
-  "UnknownIncomingMessage",
+  "UnknownIncomingMessage"
 )<{
-  readonly rawMessage: string;
-  readonly parseError: ParseResult.ParseError;
+  readonly rawMessage: string
+  readonly parseError: ParseResult.ParseError
 }> { }
 
 export const Message = Schema.TaggedStruct("message", {
   name: Schema.String,
   color: Color,
   message: Schema.String,
-  timestamp: Schema.Number,
-});
+  timestamp: Schema.Number
+})
 
 export const Join = Schema.TaggedStruct("join", {
   name: Schema.String,
-  color: Color,
-});
+  color: Color
+})
 
 export const Leave = Schema.TaggedStruct("leave", {
   name: Schema.String,
-  color: Color,
-});
+  color: Color
+})
 
-export const ServerOutgoingMessage = Schema.Union(Message, Join, Leave);
+export const ServerOutgoingMessage = Schema.Union(Message, Join, Leave)
 
 export type ServerOutgoingMessage = Schema.Schema.Type<
   typeof ServerOutgoingMessage
->;
+>
 
 export interface WebSocketConnection {
-  readonly name: string;
-  readonly color: Color;
-  readonly timeConnected: number;
+  readonly name: string
+  readonly color: Color
+  readonly timeConnected: number
 }
 
 export const AvailableColorsResponse = Schema.TaggedStruct("availableColors", {
-  colors: Schema.Array(Color),
-});
+  colors: Schema.Array(Color)
+})
 
 export type AvailableColorsResponse = Schema.Schema.Type<
   typeof AvailableColorsResponse
->;
+>
+
