@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, pipe } from "effect";
 import * as T from "../../testDriver.ts";
 
 class Foo extends Context.Tag("Foo")<Foo, { readonly bar: string }>() {
@@ -13,7 +13,8 @@ class Foo extends Context.Tag("Foo")<Foo, { readonly bar: string }>() {
  */
 
 const test1 = Effect.gen(function* () {
-  const foo = { bar: "hint: look at Effect.context" };
+  const ctx = yield* Effect.context<Foo>()
+  const foo = Context.get(ctx, Foo);
   return foo.bar;
 }).pipe(Effect.provide(Foo.Live));
 
@@ -45,12 +46,22 @@ class Random extends Context.Tag("Random")<
  * For convenience lets create Effects (or functions that return Effects) themselves already depend on the service
  */
 
-declare const nextInt: Effect.Effect<number, never, Random>;
-declare const nextBool: Effect.Effect<boolean, never, Random>;
-declare const nextIntBetween: (
-  min: number,
-  max: number
-) => Effect.Effect<number, never, Random>;
+// declare const nextInt: Effect.Effect<number, never, Random>;
+// declare const nextBool: Effect.Effect<boolean, never, Random>;
+// declare const nextIntBetween: (
+//   min: number,
+//   max: number
+// ) => Effect.Effect<number, never, Random>;
+
+const {
+  functions: {
+    nextIntBetween
+  },
+  constants: {
+    nextBool,
+    nextInt
+  }
+} = Effect.serviceMembers(Random)
 
 const test2 = Effect.gen(function* () {
   const int = yield* nextInt;
