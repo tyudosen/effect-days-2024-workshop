@@ -1,4 +1,4 @@
-import { Effect, type Scope, pipe } from "effect";
+import { Effect, Exit, Scope, pipe } from "effect";
 import * as T from "../../testDriver.ts";
 
 /**
@@ -9,29 +9,30 @@ import * as T from "../../testDriver.ts";
  */
 
 class MockFile {
-  public readonly fd: number;
-  public close = Effect.suspend(() => T.logTest(`close ${this.fd}`));
+	public readonly fd: number;
+	public close = Effect.suspend(() => T.logTest(`close ${this.fd}`));
 
-  constructor(fd: number) {
-    this.fd = fd;
-  }
+	constructor(fd: number) {
+		this.fd = fd;
+	}
 
-  static readonly open = (fd: number) =>
-    pipe(
-      T.logTest(`open ${fd}`),
-      Effect.andThen(() => new MockFile(fd))
-    );
+	static readonly open = (fd: number) =>
+		pipe(
+			T.logTest(`open ${fd}`),
+			Effect.andThen(() => new MockFile(fd))
+		);
 }
 
-declare const file: (fd: number) => Effect.Effect<number, never, Scope.Scope>;
+// declare const file: (fd: number) => Effect.Effect<number, never, Scope.Scope>;
+const file = (fd: number) => Effect.acquireRelease(MockFile.open(fd), (_) => _.close)
 
 const test1 = Effect.gen(function* () {
-  const file1 = yield* file(1);
-  const file2 = yield* file(2);
+	const file1 = yield* file(1);
+	const file2 = yield* file(2);
 }).pipe(Effect.scoped);
 
 await T.testRunAssert(1, test1, {
-  logs: ["open 1", "open 2", "close 2", "close 1"],
+	logs: ["open 1", "open 2", "close 2", "close 1"],
 });
 
 /**
@@ -41,14 +42,27 @@ await T.testRunAssert(1, test1, {
  * Your challenge is to close `file1` first, and before `file2` closes, log "hi!"
  */
 
-const test2 = Effect.gen(function* () {
-  const file1 = yield* file(1);
-  const file2 = yield* file(2);
-  yield* T.logTest("hi!");
-}).pipe(Effect.scoped);
+// const test2 = Effect.gen(function* () {
+// 	const file1 = yield* file(1);
+// 	const file2 = yield* file(2);
+// 	yield* T.logTest("hi!");
+// }).pipe(Effect.scoped);
+
+const test2 = pipe(
+	Effect.Do,
+	Effect.bind('scope_one', () => Scope.make()),
+	Effect.bind('scope_two', () => Scope.make()),
+	Effect.bind('file1', ({ scope_one }) => Scope.extend(file(1), scope_one)),
+	Effect.bind('file2', ({ scope_two }) => Scope.extend(file(2), scope_two)),
+	Effect.tap(({ scope_one }) => Scope.close(scope_one, Exit.void)),
+	Effect.tap(() => T.logTest('hi!')),
+	Effect.tap(({ scope_two }) => Scope.close(scope_two, Exit.void)),
+	Effect.asVoid
+
+)
 
 /* uncomment after you finish exercise 1 */
 
-// await T.testRunAssert(2, test2, {
-// 	logs: ['open 1', 'open 2', 'close 1', 'hi!', 'close 2'],
-// });
+await T.testRunAssert(2, test2, {
+	logs: ['open 1', 'open 2', 'close 1', 'hi!', 'close 2'],
+});
