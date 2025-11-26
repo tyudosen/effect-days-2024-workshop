@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { Brand, Data, Effect, Equal, Hash, HashSet, Schema } from "effect";
+import { Brand, Console, Data, Effect, Equal, Hash, HashSet, Schema } from "effect";
 
 /**
  * # Exercise 1:
@@ -7,7 +7,6 @@ import { Brand, Data, Effect, Equal, Hash, HashSet, Schema } from "effect";
  * Implement `equals` and `hash` for the Transaction class
  */
 
-// @ts-expect-error: incorrectly implements interface `Equal` | `Hash`
 class Transaction implements Equal.Equal, Hash.Hash {
   public readonly id: string;
   public readonly time: Date;
@@ -17,6 +16,15 @@ class Transaction implements Equal.Equal, Hash.Hash {
     this.id = id;
     this.time = time;
     this.amount = amount;
+  }
+
+  [Equal.symbol](that: unknown) {
+    return (that instanceof Transaction && that.id === this.id
+      && that.amount === this.amount && that.time.getTime() === this.time.getTime());
+  }
+
+  [Hash.symbol]() {
+    return Hash.number(this.time.getTime())
   }
 }
 
@@ -29,7 +37,7 @@ assert(
 
 assert(
   Hash.hash(new Transaction("1", 1, new Date(3))) ===
-    Hash.hash(new Transaction("1", 1, new Date(3)))
+  Hash.hash(new Transaction("1", 1, new Date(3)))
 );
 
 /**
@@ -39,16 +47,19 @@ assert(
  * Here is a regex for you to use : /^[\x00-\x7F]*$/
  */
 
-type ASCIIString = never;
+type ASCIIString = string & Brand.Brand<"ASCIIString">
+
+const make = Brand.refined<ASCIIString>(
+  (_) => /^[\x00-\x7F]*$/.test(_),
+  (_) => Brand.error('Expected ASCIIString')
+)
 
 function takesOnlyAscii(s: ASCIIString) {
   // ...
 }
 
-// @ts-expect-error: should not compile fix it
-const string1: ASCIIString = "hello";
-// @ts-expect-error: should not compile. fix it
-const string2: ASCIIString = "hello🌍";
+const string1: ASCIIString = make("hello");
+const string2: ASCIIString = make("hello🌍");
 
 takesOnlyAscii(string1);
 takesOnlyAscii(string2);
